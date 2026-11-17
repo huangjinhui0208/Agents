@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta
+      name="description"
+      content="使用本地 Ollama 模型，只读检索代码仓库并回答代码问题。"
+    />
+    <title>代码考古工作台</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20261117-markdown" />
+    <script src="/static/markdown.js?v=20261117-markdown" defer></script>
+    <script src="/static/app.js?v=20261117-markdown" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#chat-composer">跳到提问框</a>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand" aria-label="代码考古工作台">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </span>
+          <span>
+            <strong>代码考古工作台</strong>
+            <small>只读理解 · 本地推理</small>
+          </span>
+        </div>
+
+        <div class="runtime-strip" aria-label="运行状态">
+          <span class="status-item">
+            <span id="runtime-dot" class="status-dot is-loading" aria-hidden="true"></span>
+            <span id="runtime-status">正在连接本地服务</span>
+          </span>
+          <span id="model-name" class="runtime-model">模型未就绪</span>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="archive-panel" aria-labelledby="archive-title">
+          <div class="panel-heading">
+            <p class="eyebrow">Repository archive</p>
+            <h1 id="archive-title">仓库档案</h1>
+            <p>选择一个本机仓库。Agent 只读取代码、文档和 Git 元信息。</p>
+          </div>
+
+          <section class="archive-section" aria-labelledby="repo-selection-title">
+            <div class="section-label-row">
+              <h2 id="repo-selection-title">工作区</h2>
+              <span class="readonly-seal">只读</span>
+            </div>
+
+            <form id="repository-form" class="repository-form">
+              <label for="repository-path">仓库绝对路径</label>
+              <div class="path-control">
+                <input
+                  id="repository-path"
+                  name="repository-path"
+                  type="text"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="/Users/name/projects/repository"
+                />
+                <button
+                  id="browse-button"
+                  class="icon-button"
+                  type="button"
+                  aria-label="浏览本机目录"
+                  title="浏览本机目录"
+                >
+                  <span aria-hidden="true">⌕</span>
+                </button>
+              </div>
+              <button id="load-repository" class="primary-button full-width" type="submit">
+                载入此仓库
+              </button>
+            </form>
+
+            <div id="repository-card" class="repository-card is-empty" aria-live="polite">
+              <span class="repository-glyph" aria-hidden="true">⌁</span>
+              <div>
+                <strong id="repository-name">尚未选择仓库</strong>
+                <p id="repository-meta">载入后可开始提问</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="archive-section session-section" aria-labelledby="session-title">
+            <div class="section-label-row">
+              <h2 id="session-title">当前会话</h2>
+              <button id="reset-session" class="text-button" type="button" disabled>
+                清空对话
+              </button>
+            </div>
+            <dl class="archive-facts">
+              <div>
+                <dt>Revision</dt>
+                <dd id="revision-value">—</dd>
+              </div>
+              <div>
+                <dt>Files</dt>
+                <dd id="file-count-value">—</dd>
+              </div>
+              <div>
+                <dt>Session</dt>
+                <dd id="session-value">—</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="archive-section method-note" aria-labelledby="method-title">
+            <h2 id="method-title">阅读方法</h2>
+            <ol>
+              <li><span>定位</span> 按文件名或关键词寻找入口</li>
+              <li><span>取证</span> 读取相关行并追踪调用关系</li>
+              <li><span>作答</span> 给出结论、路径与证据边界</li>
+            </ol>
+            <p id="limits-note" class="limits-note">正在读取运行限制…</p>
+          </section>
+        </aside>
+
+        <main class="conversation-panel" aria-labelledby="conversation-title">
+          <header class="conversation-header">
+            <div>
+              <p class="eyebrow">Local code inquiry</p>
+              <h2 id="conversation-title">向仓库提问</h2>
+            </div>
+            <span id="active-repository" class="active-repository">未连接仓库</span>
+          </header>
+
+          <section
+            id="message-log"
+            class="message-log"
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions"
+            aria-busy="false"
+          >
+            <div id="empty-state" class="empty-state">
+              <div class="empty-specimen" aria-hidden="true">
+                <span>repo</span>
+                <i></i>
+                <span>symbol</span>
+                <i></i>
+                <span>evidence</span>
+              </div>
+              <h3>先载入仓库，再从一个具体问题开始</h3>
+              <p>
+                适合询问入口、模块职责、调用路径和实现依据。每次回答会把检索过程整理成可折叠的证据轨迹。
+              </p>
+              <div class="example-prompts" aria-label="问题示例">
+                <button type="button" data-prompt="这个仓库的整体架构是什么？">
+                  整体架构是什么？
+                </button>
+                <button type="button" data-prompt="程序从哪里启动，主要调用路径是什么？">
+                  主调用路径在哪里？
+                </button>
+                <button type="button" data-prompt="请解释核心模块之间如何协作，并给出源码位置。">
+                  核心模块如何协作？
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <form id="chat-composer" class="chat-composer">
+            <label class="sr-only" for="question-input">输入代码问题</label>
+            <textarea
+              id="question-input"
+              name="question"
+              rows="1"
+              maxlength="12000"
+              placeholder="选择仓库后，在这里询问调用路径、模块职责或实现细节…"
+              disabled
+            ></textarea>
+            <div class="composer-actions">
+              <span id="composer-hint">Enter 发送 · Shift + Enter 换行</span>
+              <button id="send-button" class="send-button" type="submit" disabled>
+                <span>发送问题</span>
+                <span aria-hidden="true">↗</span>
+              </button>
+            </div>
+          </form>
+        </main>
+      </div>
+    </div>
+
+    <dialog id="repository-browser" class="repository-browser" aria-labelledby="browser-title">
+      <form method="dialog" class="browser-shell">
+        <header class="browser-header">
+          <div>
+            <p class="eyebrow">Local directory</p>
+            <h2 id="browser-title">选择代码仓库</h2>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="关闭目录浏览器">×</button>
+        </header>
+
+        <div class="browser-location">
+          <button id="parent-directory" class="icon-button" type="button" aria-label="返回上级目录">
+            ↑
+          </button>
+          <code id="browser-path">正在读取…</code>
+        </div>
+
+        <p id="browser-error" class="inline-error" role="alert" hidden></p>
+        <div id="directory-list" class="directory-list" aria-label="子目录" aria-busy="false"></div>
+
+        <footer class="browser-footer">
+          <span>目录内容只用于选择，不会在此步骤发送给模型。</span>
+          <div>
+            <button class="secondary-button" value="cancel">取消</button>
+            <button id="select-current-directory" class="primary-button" type="button">
+              选择当前目录
+            </button>
+          </div>
+        </footer>
+      </form>
+    </dialog>
+
+    <div id="toast-region" class="toast-region" aria-live="assertive" aria-atomic="true"></div>
+
+    <noscript>
+      <div class="noscript-message">此聊天界面需要启用 JavaScript。</div>
+    </noscript>
+  </body>
+</html>
